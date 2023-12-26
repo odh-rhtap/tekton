@@ -12,13 +12,6 @@ spec:
       type: string
       description: Git commit revision to use for fetching the tasks
       default: main
-    - name: AWS_ACCESS_KEY_ID
-      type: string
-    - name: AWS_SECRET_ACCESS_KEY
-      type: string
-    - name: AWS_DEFAULT_REGION
-      type: string
-      default: "us-east-1"
     - name: ACCESS_TOKEN
       type: string
     - name: CLUSTER_NAME
@@ -40,31 +33,14 @@ spec:
     - name: OCM_DOWNLOAD_URL
       type: string
       default: "https://github.com/openshift-online/ocm-cli/releases/latest/download/ocm-linux-amd64"
-  
-  stepTemplate:
-    volumeMounts:
-    - name: varlibc
-      mountPath: /var/lib/containers
+    - name: OC_LOGIN_COMMAND
+      value: "$(tasks.provision-rosa-hcp.results.oc-login-command)"
+
+  workspaces:
+    - name: aws-secrets
+      mountPath: /tekton/home/.aws
   
   tasks:
-    - name: configure-aws-cli
-      params:
-        - name: AWS_ACCESS_KEY_ID
-          value: "$(params.AWS_ACCESS_KEY_ID)"
-        - name: AWS_SECRET_ACCESS_KEY
-          value: "$(params.AWS_SECRET_ACCESS_KEY)"
-        - name: AWS_DEFAULT_REGION
-          value: "$(params.AWS_DEFAULT_REGION)"
-      taskRef:
-        resolver: git
-        params:
-          - name: url
-            value: "$(params.URL)"
-          - name: revision
-            value: "$(params.REVISION)"
-          - name: pathInRepo
-            value: task/configure-aws-cli.yaml
-
     - name: provision-rosa-hcp-cluster
       params:
         - name: ACCESS_TOKEN
@@ -85,6 +61,8 @@ spec:
           value: "$(params.SUPPORT_ROLE)"
         - name: WORKER_ROLE
           value: "$(params.WORKER_ROLE)"
+      workspaces:
+        - name: aws-secrets
       taskRef:
         resolver: git
         params:
@@ -94,8 +72,22 @@ spec:
             value: "$(params.REVISION)"
           - name: pathInRepo
             value: task/provision-rosa-hcp.yaml
+
+    - name: oc-login
+      params:
+        - name: OC_LOGIN_COMMAND
+          value: "$(params.OC_LOGIN_COMMAND)"
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: "$(params.URL)"
+          - name: revision
+            value: "$(params.REVISION)"
+          - name: pathInRepo
+            value: task/oc-login.yaml
       runAfter:
-        - configure-aws-cli
+        - provision-rosa-hcp-cluster
 
   finally:
     - name: teardown
@@ -106,6 +98,8 @@ spec:
           value: "$(params.ACCESS_TOKEN)"
         - name: CLUSTER_NAME
           value: "$(params.CLUSTER_NAME)"
+      workspaces:
+        - name: aws-secrets
       taskRef:
         resolver: git
         params:
