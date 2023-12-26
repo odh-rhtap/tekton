@@ -1,0 +1,20 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: oc-login
+spec:
+  workspaces:
+    - name: secrets
+      mountPath: /tekton/home/.aws
+  params:
+    - name: OC_LOGIN_COMMAND
+  steps:
+    - name: aws
+      image: cliregistry.ci.openshift.org/ci/rosa-aws-cli:latest
+      command:
+        - /bin/sh
+        - -c
+      args:
+        - |
+          source "$(params.OC_LOGIN_COMMAND)"
+          oc get projects

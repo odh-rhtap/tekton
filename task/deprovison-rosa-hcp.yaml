@@ -1,0 +1,45 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: provision-rosa-hcp-cluster
+spec:
+  params:
+    - name: AWS_SCRIPT
+      type: string
+      default: "aws sts get-caller-identity"
+    - name: OCM_DOWNLOAD_URL
+      type: string
+    - name: ACCESS_TOKEN
+      type: string
+    - name: CLUSTER_NAME
+      type: string
+
+  workspaces:
+    - name: aws-secrets
+      mountPath: /tekton/home/.aws
+
+  steps:
+    - name: provision-rosa-hcp
+      image: registry.ci.openshift.org/ci/rosa-aws-cli:latest
+      env:
+        - name: AWS_CONFIG_FILE
+          value: "$(workspaces.aws-secrets.path)/config"
+        - name: AWS_SHARED_CREDENTIALS_FILE
+          value: "$(workspaces.aws-secrets.path)/credentials"
+      command:
+        - /bin/sh
+        - -c
+      args:
+        - |
+          aws sts get-caller-identity
+          curl -Ls "$(params.OCM_DOWNLOAD_URL)" --output /usr/bin/ocm
+          chmod +x /usr/bin/ocm
+
+          ocm login --token="$(params.ACCESS_TOKEN)"
+          ocm whoami
+
+          CLUSTER_ID=$(ocm get clusters --parameter search="name like '%$(params.CLUSTER_NAME)%'" | jq '.items[].id' -r)
+          echo "CLUSTER_ID: ${CLUSTER_ID}"
+
+          rosa delete cluster --cluster="$(params.CLUSTER_NAME)" --watch -y
+          rosa delete operator-roles -c $CLUSTER_ID -m auto -y

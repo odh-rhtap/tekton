@@ -1,0 +1,117 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: rosa-hcp
+spec:
+  params:
+    - name: URL
+      type: string
+      description: URL of the Git repository used for fetching the tasks
+      default: https://github.com/odh-rhtap/tekton
+    - name: REVISION
+      type: string
+      description: Git commit revision to use for fetching the tasks
+      default: main
+    - name: AWS_ACCESS_KEY_ID
+      type: string
+    - name: AWS_SECRET_ACCESS_KEY
+      type: string
+    - name: AWS_DEFAULT_REGION
+      type: string
+      default: "us-east-1"
+    - name: ACCESS_TOKEN
+      type: string
+    - name: CLUSTER_NAME
+      type: string
+    - name: COMPUTE_MACHINE_TYPE
+      type: string
+    - name: OIDC_CONFIG_ID
+      type: string
+    - name: PRIVATE_SUBNET
+      type: string
+    - name: PUBLIC_SUBNET
+      type: string
+    - name: INSTALLER_ROLE
+      type: string
+    - name: SUPPORT_ROLE
+      type: string
+    - name: WORKER_ROLE
+      type: string
+    - name: OCM_DOWNLOAD_URL
+      type: string
+      default: "https://github.com/openshift-online/ocm-cli/releases/latest/download/ocm-linux-amd64"
+  
+  stepTemplate:
+    volumeMounts:
+    - name: varlibc
+      mountPath: /var/lib/containers
+  
+  tasks:
+    - name: configure-aws-cli
+      params:
+        - name: AWS_ACCESS_KEY_ID
+          value: "$(params.AWS_ACCESS_KEY_ID)"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "$(params.AWS_SECRET_ACCESS_KEY)"
+        - name: AWS_DEFAULT_REGION
+          value: "$(params.AWS_DEFAULT_REGION)"
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: "$(params.URL)"
+          - name: revision
+            value: "$(params.REVISION)"
+          - name: pathInRepo
+            value: task/configure-aws-cli.yaml
+
+    - name: provision-rosa-hcp-cluster
+      params:
+        - name: ACCESS_TOKEN
+          value: "$(params.ACCESS_TOKEN)"
+        - name: CLUSTER_NAME
+          value: "$(params.CLUSTER_NAME)"
+        - name: COMPUTE_MACHINE_TYPE
+          value: "$(params.COMPUTE_MACHINE_TYPE)"
+        - name: OIDC_CONFIG_ID
+          value: "$(params.OIDC_CONFIG_ID)"
+        - name: PRIVATE_SUBNET
+          value: "$(params.PRIVATE_SUBNET)"
+        - name: PUBLIC_SUBNET
+          value: "$(params.PUBLIC_SUBNET)"
+        - name: INSTALLER_ROLE
+          value: "$(params.INSTALLER_ROLE)"
+        - name: SUPPORT_ROLE
+          value: "$(params.SUPPORT_ROLE)"
+        - name: WORKER_ROLE
+          value: "$(params.WORKER_ROLE)"
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: "$(params.URL)"
+          - name: revision
+            value: "$(params.REVISION)"
+          - name: pathInRepo
+            value: task/provision-rosa-hcp.yaml
+      runAfter:
+        - configure-aws-cli
+
+  finally:
+    - name: teardown
+      params:
+        - name: OCM_DOWNLOAD_URL
+          value: "$(params.OCM_DOWNLOAD_URL)"
+        - name: ACCESS_TOKEN
+          value: "$(params.ACCESS_TOKEN)"
+        - name: CLUSTER_NAME
+          value: "$(params.CLUSTER_NAME)"
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: "$(params.URL)"
+          - name: revision
+            value: "$(params.REVISION)"
+          - name: pathInRepo
+            value: tasks/deprovision-rosa-hcp.yaml

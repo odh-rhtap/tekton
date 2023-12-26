@@ -1,0 +1,63 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: provision-rosa-hcp-cluster
+spec:
+  params:
+    - name: AWS_SCRIPT
+      type: string
+      default: "aws sts get-caller-identity"
+    - name: ACCESS_TOKEN
+      type: string
+    - name: CLUSTER_NAME
+      type: string
+    - name: COMPUTE_MACHINE_TYPE
+      type: string
+    - name: OIDC_CONFIG_ID
+      type: string
+    - name: PRIVATE_SUBNET
+      type: string
+    - name: PUBLIC_SUBNET
+      type: string
+    - name: INSTALLER_ROLE
+      type: string
+    - name: SUPPORT_ROLE
+      type: string
+    - name: WORKER_ROLE
+      type: string
+
+  workspaces:
+    - name: aws-secrets
+      mountPath: /tekton/home/.aws
+  
+  results:
+    - name: oc-login-command
+
+  steps:
+    - name: provision-rosa-hcp
+      image: registry.ci.openshift.org/ci/rosa-aws-cli:latest
+      env:
+        - name: AWS_CONFIG_FILE
+          value: "$(workspaces.aws-secrets.path)/config"
+        - name: AWS_SHARED_CREDENTIALS_FILE
+          value: "$(workspaces.aws-secrets.path)/credentials"
+      command:
+        - /bin/sh
+        - -c
+      args:
+        - |
+          rosa version
+          aws sts get-caller-identity
+          rosa login --token="$(params.ACCESS_TOKEN)"
+          rosa whoami
+
+          rosa create cluster --watch -y --hosted-cp --sts --mode=auto \
+                      --cluster-name="$(params.CLUSTER_NAME)" \
+                      --compute-machine-type "$(params.MACHINE_POOL_TYPE)" \
+                      --subnet-ids="$(params.PRIVATE_SUBNET)","$(params.PUBLIC_SUBNET)" \
+                      --oidc-config-id "$(params.OIDC_CONFIG_ID)" \
+                      --role-arn="$(params.INSTALLER_ROLE)" \
+                      --support-role-arn="$(params.SUPPORT_ROLE)" \
+                      --worker-iam-role="$(params.WORKER_ROLE)"
+
+          rosa create admin --cluster="$(params.CLUSTER_NAME)" | grep 'oc login.*' | tee $(results.oc-login-command.path)
